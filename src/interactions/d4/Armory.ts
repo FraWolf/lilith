@@ -74,7 +74,7 @@ export default class Armory extends Interaction {
         characters: res.characters.map((character) => character.name),
       };
 
-      await ctx.client.cache.set(`players:${player}`, JSON.stringify(playerObj));
+      await ctx.client.cache.json.set(`players:${player}`, ".", playerObj);
     }
 
     let character: PlayerArmory | null = null;
@@ -121,9 +121,9 @@ export default class Armory extends Interaction {
 
     choices = await Promise.all(
       keys.map(async (key) => {
-        const player = await ctx.client.cache.get(key);
+        const player = await ctx.client.cache.json.get(key);
 
-        const parsed = JSON.parse(player!) as {
+        const parsed = player as {
           battleTag: string;
           name: string;
           characters: string[];

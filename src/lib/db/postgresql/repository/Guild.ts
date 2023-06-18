@@ -34,7 +34,7 @@ export class GuildRepository {
    * @returns Promise<Guild> - The guild.
    */
   async findOrCreate(guildId: string, skipCache?: boolean): Promise<Guild> {
-    const cache = await this.client.cache.get(`guilds:${guildId}`);
+    const cache = await this.client.cache.json.get(`guilds:${guildId}`);
 
     if (!cache || !!skipCache) {
       let guild = await this.guilds.findUnique({ where: { guildId }, include: { events: true } });
@@ -48,10 +48,10 @@ export class GuildRepository {
         });
       }
 
-      await this.client.cache.set(`guilds:${guildId}`, JSON.stringify(guild));
+      await this.client.cache.json.set(`guilds:${guildId}`, ".", guild);
 
       return guild;
-    } else return JSON.parse(cache) as Guild;
+    } else return cache as Guild;
   }
 
   /**
@@ -101,7 +101,7 @@ export class GuildRepository {
       this.client.logger.error(error);
     }
 
-    await this.client.cache.set(`guilds:${guildId}`, JSON.stringify(guild));
+    await this.client.cache.json.set(`guilds:${guildId}`, ".", guild);
   }
 
   async removeEvent(guildId: string, type: EventsList, channelId: string): Promise<void> {
@@ -117,7 +117,7 @@ export class GuildRepository {
       this.client.logger.error(error);
     }
 
-    await this.client.cache.set(`guilds:${guildId}`, JSON.stringify(guild));
+    await this.client.cache.json.set(`guilds:${guildId}`, ".", guild);
   }
 
   /**

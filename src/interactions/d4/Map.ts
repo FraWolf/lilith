@@ -98,11 +98,11 @@ export default class Map extends Interaction {
 
     if (!type) return await interaction.respond([]);
 
-    let data = await ctx.client.cache.get(`map:${type}`);
+    let data = await ctx.client.cache.json.get(`map:${type}`);
 
     if (!data) return await interaction.respond([]);
 
-    let nodes = JSON.parse(data) as any[];
+    let nodes = data as any[];
 
     const value = interaction.options.getFocused();
 

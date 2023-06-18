@@ -46,11 +46,11 @@ export default class Item extends Interaction {
   static async autocomplete(interaction: AutocompleteInteraction, ctx: Context): Promise<any> {
     const language = discordToLanguage[interaction.guild?.preferredLocale || interaction.locale] || "us";
 
-    let data = await ctx.client.cache.get(`database:${language}`);
+    let data = await ctx.client.cache.json.get(`database:${language}`);
 
     if (!data) return await interaction.respond([]);
 
-    let items = JSON.parse(data) as {
+    let items = data as {
       value: string;
       desc: string;
       label: string;

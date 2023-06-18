@@ -31,14 +31,13 @@ export class Worker {
 
       if (!data) continue;
 
-      let cache = await this.client.cache.get(`database:${language}`);
+      let cache = await this.client.cache.json.get(`database:${language}`);
 
       if (cache) {
-        cache = JSON.parse(cache);
-        if (cache?.length === data.length) continue;
+        if (Object.entries(cache)?.length === data.length) continue;
       }
 
-      await this.client.cache.set(`database:${language}`, JSON.stringify(data));
+      await this.client.cache.json.set(`database:${language}`, ".", data);
 
       this.client.logger.info(`Added ${data.length} entries to the database cache for ${language}.`);
 
@@ -73,7 +72,7 @@ export class Worker {
         characters: user?.characters.map((character) => character.name),
       };
 
-      await this.client.cache.set(`players:${player.battleTag}`, JSON.stringify(playerObj));
+      await this.client.cache.json.set(`players:${player.battleTag}`, ".", playerObj);
 
       await wait(1000);
     }
@@ -101,7 +100,7 @@ export class Worker {
     for (const key in data) {
       if (data.hasOwnProperty(key)) {
         const value = data[key as keyof typeof data];
-        await this.client.cache.set(`map:${key}`, JSON.stringify(value));
+        await this.client.cache.json.set(`map:${key}`, ".", value);
       }
     }
   }
