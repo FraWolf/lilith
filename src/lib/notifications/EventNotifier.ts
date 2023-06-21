@@ -3,7 +3,7 @@ import { Message, MessageCreateOptions, MessagePayload, time } from "discord.js"
 import { Client } from "../../core/Client";
 import { Event, EventsList } from "../../types";
 import { duration, wait } from "../../utils/Commons";
-import { EventEmbed } from "../../utils/embeds/EventEmbed";
+import { EventEmbed, territory } from "../../utils/embeds/EventEmbed";
 import { Broadcaster } from "./Broadcaster";
 import { container } from "tsyringe";
 import { clientSymbol } from "../../utils/Constants";
@@ -67,10 +67,12 @@ export class EventNotifier {
       if (!cache || cachedEvent.timestamp !== value.timestamp) {
         await this.client.cache.set(`events:${this.client.user?.id}:${key}`, JSON.stringify(value));
 
+        this.client.logger.info(value);
+
         const date = Date.now();
         const event = new Date(value.timestamp * 1000).getTime();
 
-        if (event < date - duration.minutes(5)) {
+        if (event < date - duration.minutes(2)) {
           this.client.logger.info(`Event ${key} is outdated, skipping...`);
           continue;
         }
@@ -156,10 +158,10 @@ function getTitle(key: string, event: Event) {
         "t"
       )}\n\nNext expected boss is ${event.nextExpectedName} at ${time(event.nextExpected, "t")}`;
     case "helltide":
-      return `Helltide occuring until ${time(event.timestamp + 3600, "t")}, next helltide at ${time(
-        event.timestamp + 8100,
+      return `Helltide occuring in ${territory[event.zone]} until ${time(
+        event.timestamp + 3600,
         "t"
-      )}`;
+      )}, next helltide at ${time(event.timestamp + 8100, "t")}`;
     case "legion":
       return `Legion appears ${time(event.timestamp, "R")}, next legion at ${time(event.timestamp + 1800, "t")}`;
     default:
