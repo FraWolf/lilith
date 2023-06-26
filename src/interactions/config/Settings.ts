@@ -7,8 +7,10 @@ import {
   ChatInputCommandInteraction,
   GuildChannel,
   InteractionResponse,
+  Message,
   NewsChannel,
   PermissionFlagsBits,
+  Role,
   TextChannel,
   ThreadChannel,
 } from "discord.js";
@@ -18,10 +20,16 @@ import { Client } from "../../core/Client";
 import { Context, Interaction } from "../../core/Interaction";
 
 import { SettingsEmbed } from "../../embeds/SettingsEmbed";
-import { EventsList } from "../../types";
-import { clientSymbol, eventsChoices, localesMap } from "../../utils/Constants";
-import { locales } from "../../i18n/i18n-util";
+
+import L from "../../i18n/i18n-node";
 import { Locales } from "../../i18n/i18n-types";
+import { locales } from "../../i18n/i18n-util";
+
+import { Event as D4Event, EventsList } from "../../types";
+import { clientSymbol, eventsChoices, localesMap } from "../../utils/Constants";
+import { EventEmbed } from "../../embeds/EventEmbed";
+import { Event } from "@prisma/client";
+import { getTitle } from "../../lib/notifications/NotifierUtils";
 
 @injectable()
 export default class Settings extends Interaction {
@@ -32,8 +40,8 @@ export default class Settings extends Interaction {
   public readonly command: ApplicationCommandData = {
     type: ApplicationCommandType.ChatInput,
     name: "settings",
-    description: "Manage your actual guild settings.",
-    defaultMemberPermissions: [PermissionFlagsBits.ManageGuild],
+    description: "Manage your guild settings.",
+    defaultMemberPermissions: PermissionFlagsBits.ManageGuild,
     dmPermission: false,
     options: [
       {
@@ -74,12 +82,7 @@ export default class Settings extends Interaction {
                 type: ApplicationCommandOptionType.Channel,
                 name: "channel",
                 description: "The channel to send notifications to.",
-                channelTypes: [
-                  ChannelType.GuildAnnouncement,
-                  ChannelType.GuildText,
-                  ChannelType.PublicThread,
-                  ChannelType.PrivateThread,
-                ],
+                channelTypes: [ChannelType.GuildAnnouncement, ChannelType.GuildText, ChannelType.PublicThread],
                 required: true,
               },
               {
@@ -110,12 +113,7 @@ export default class Settings extends Interaction {
                 type: ApplicationCommandOptionType.Channel,
                 name: "channel",
                 description: "The channel to send notifications to.",
-                channelTypes: [
-                  ChannelType.GuildAnnouncement,
-                  ChannelType.GuildText,
-                  ChannelType.PublicThread,
-                  ChannelType.PrivateThread,
-                ],
+                channelTypes: [ChannelType.GuildAnnouncement, ChannelType.GuildText, ChannelType.PublicThread],
                 required: true,
               },
               {
@@ -141,12 +139,7 @@ export default class Settings extends Interaction {
                 type: ApplicationCommandOptionType.Channel,
                 name: "channel",
                 description: "The channel to disable notifications to.",
-                channelTypes: [
-                  ChannelType.GuildAnnouncement,
-                  ChannelType.GuildText,
-                  ChannelType.PublicThread,
-                  ChannelType.PrivateThread,
-                ],
+                channelTypes: [ChannelType.GuildAnnouncement, ChannelType.GuildText, ChannelType.PublicThread],
                 required: true,
               },
             ],
@@ -158,26 +151,14 @@ export default class Settings extends Interaction {
           },
           {
             type: ApplicationCommandOptionType.Subcommand,
-            name: "test",
-            description: "Test if everything is working fine.",
+            name: "refresh",
+            description: "Refresh notifications for a given event.",
             options: [
               {
                 type: ApplicationCommandOptionType.String,
                 name: "event",
-                description: "The event to test notifications for.",
+                description: "The event to refresh notifications for.",
                 choices: eventsChoices,
-                required: true,
-              },
-              {
-                type: ApplicationCommandOptionType.Channel,
-                name: "channel",
-                description: "The channel where you should receive the notification.",
-                channelTypes: [
-                  ChannelType.GuildAnnouncement,
-                  ChannelType.GuildText,
-                  ChannelType.PublicThread,
-                  ChannelType.PrivateThread,
-                ],
                 required: true,
               },
             ],
@@ -206,8 +187,6 @@ export default class Settings extends Interaction {
     let role = options.getRole("role");
     let schedule = options.getBoolean("schedule");
 
-    const currentEvent = guild?.events.find((item) => item.type === event && channel.id === item.channelId);
-
     switch (subcommand) {
       case "locale":
         try {
@@ -217,11 +196,15 @@ export default class Settings extends Interaction {
         }
 
         await interaction.reply({
-          content: i18n.settings.locale.SUCCESS({ locale: localesMap[locale as Locales] }),
+          content: L[locale].settings.locale.SUCCESS({ locale: localesMap[locale as Locales] }),
           ephemeral: true,
         });
         break;
     }
+
+    let currentEvent: Event | undefined;
+
+    if (channel) currentEvent = guild?.events.find((item) => item.type === event && channel.id === item.channelId);
 
     switch (group) {
       case "notifications":
@@ -320,32 +303,72 @@ export default class Settings extends Interaction {
 
             await interaction.reply({ embeds: [embed], ephemeral: true });
             break;
-          case "test":
-            if (!currentEvent)
+          case "refresh":
+            const currentEvents = guild?.events.filter((item) => item.type === event);
+
+            if (!currentEvents?.length)
               return await interaction.reply({
                 content: i18n.settings.notifications.NOT_ENABLED({ event }),
                 ephemeral: true,
               });
 
-            const channelElement = interaction.guild.channels.cache.get(currentEvent.channelId) as
-              | TextChannel
-              | NewsChannel
-              | ThreadChannel;
+            const cache = await this.client.cache.get(`events:${this.client.user.id}:${event}`);
 
-            if (!channel)
+            if (!cache)
               return await interaction.reply({
-                content: i18n.settings.notifications.NO_EVENTS_IN_CHANNEL({ channel: channel.toString() }),
+                content: i18n.settings.notifications.NO_EVENTS(),
                 ephemeral: true,
               });
 
-            if (!this.checkPermission(interaction, channelElement))
-              return await interaction.reply({
-                content: i18n.settings.notifications.NO_PERMISSIONS({ channel: channel.toString() }),
-                ephemeral: true,
+            const value = JSON.parse(cache) as any as D4Event;
+
+            for (const event of currentEvents) {
+              const embed = new EventEmbed(event.type, value);
+
+              const channel = interaction.guild.channels.cache.get(event.channelId) as TextChannel | NewsChannel;
+
+              if (!channel) continue;
+
+              let content = getTitle(event.type, value, guild.locale as Locales);
+
+              if (event.roleId) {
+                content += ` - <@&${event.roleId}>`;
+              }
+
+              const oldMessage = event.messageId
+                ? ((await channel.messages.fetch(event.messageId).catch((e) => {
+                    console.error(`Unable to send fetch message ${event.messageId}:`, e.message);
+                    return null;
+                  })) as Message<true>)
+                : null;
+
+              if (oldMessage)
+                await oldMessage
+                  .delete()
+                  .catch((e) => console.error(`Unable to remove message with id: ${event.messageId}`, e));
+
+              const message = await channel.send({
+                content,
+                embeds: [embed],
               });
+
+              try {
+                await this.client.repository.guild.updateEventMessageId(
+                  interaction.guild.id,
+                  event.type as EventsList,
+                  channel.id,
+                  message.id
+                );
+              } catch (error) {
+                this.client.logger.error(`Unable to update event ${event.type} in guild ${interaction.guild.id}`);
+              }
+            }
 
             await interaction.reply({
-              content: i18n.settings.notifications.EVENTS_WORKING({ event, channel: channel.toString() }),
+              content: i18n.settings.notifications.REFRESHED({
+                event,
+                channels: currentEvents.map((item) => `<#${item.channelId}>`).join(", "),
+              }),
               ephemeral: true,
             });
             break;

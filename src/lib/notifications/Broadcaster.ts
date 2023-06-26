@@ -1,15 +1,8 @@
-import {
-  Guild,
-  GuildScheduledEventCreateOptions,
-  Message,
-  MessageCreateOptions,
-  MessagePayload,
-  NewsChannel,
-  TextChannel,
-} from "discord.js";
-
+import { Guild, GuildScheduledEventCreateOptions, Message, MessageCreateOptions, MessagePayload } from "discord.js";
 import { container } from "tsyringe";
+
 import { Client } from "../../core/Client";
+
 import { clientSymbol } from "../../utils/Constants";
 
 export class Broadcaster {
@@ -32,26 +25,25 @@ export class Broadcaster {
   async broadcast(
     channelId: string,
     message: string | MessagePayload | MessageCreateOptions,
-    oldMessageId: string | null,
-    key?: string
+    oldMessageId: string | null
   ): Promise<(Message<true> | null)[]> {
     return (await this.client.cluster.broadcastEval(
       async (c, { channelId, message, oldMessageId }) => {
         let channel = c.channels.cache.get(channelId);
 
-        if (!channel) return;
+        if (!channel || !channel.isTextBased()) return;
 
-        channel = channel as TextChannel | NewsChannel;
-
-        // Remove old message before sending message
-        let oldMessage = oldMessageId
-          ? await channel.messages.fetch(oldMessageId).catch((e) => {
+        const oldMessage = oldMessageId
+          ? ((await channel.messages.fetch(oldMessageId).catch((e) => {
               console.error(`Unable to send fetch message ${oldMessageId}:`, e.message);
               return null;
-            })
+            })) as Message<true>)
           : null;
+
         if (oldMessage)
-          await oldMessage.delete().catch((e) => console.error(`Unable to remove message with id: ${oldMessageId}`));
+          await oldMessage
+            .delete()
+            .catch((e) => console.error(`Unable to remove message with id: ${oldMessageId}`, e.message));
 
         return await channel.send(message as string | MessagePayload | MessageCreateOptions).catch((e) => {
           console.error(`Unable to send message`, e.message);

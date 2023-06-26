@@ -16,6 +16,7 @@ const en = {
       NO_EVENTS: "There are no events enabled.",
       NO_EVENTS_IN_CHANNEL: "There are no events enabled in {channel}.",
       EVENTS_WORKING: "Notifications for **{event}** are working and will be sent to {channel}.",
+      REFRESHED: "Notifications for **{event}** have been refreshed and will be sent to {channels}.",
     },
   },
   armory: {
@@ -28,6 +29,7 @@ const en = {
     MULTIPLE_CHARACTERS: "This player has multiple characters. Please select one.",
     PLAYER_CHOICE: "{name} ({characters} characters)",
     NOT_TRACKED_YET: '"{player}" isn\'t currently tracked, send to track it.',
+    PLAYER_IN_QUEUE: "The player **{player}** is currently in the queue.",
   },
   events: {
     WORLD_BOSS: "{name} appears in {zone} ({territory}) at {time}.\n\nNext expected boss is {nextName} at {nextTime}",
@@ -38,7 +40,7 @@ const en = {
     ARMORY: {
       STATISTICS_TITLE: "Statistics",
       STATISTICS_VALUE:
-        "World Tier: {worldTier}\nMonsters killed: {monstersKilled}\nElites killed: {elitesKilled}\nGolds collected: {goldsCollected}",
+        "World Tier: {worldTier}\nMonsters killed: {monstersKilled}\nElites killed: {elitesKilled}\nGold collected: {goldCollected}",
       CHARACTER_CREATION_TITLE: "Character creation",
       LAST_PLAYED_TITLE: "Last played",
       PLAYED_TIME_TITLE: "Played time",

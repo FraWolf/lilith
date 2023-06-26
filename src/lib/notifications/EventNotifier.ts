@@ -1,15 +1,16 @@
-import { Message, MessageCreateOptions, MessagePayload, time } from "discord.js";
+import { Message, MessageCreateOptions, MessagePayload } from "discord.js";
+import { container } from "tsyringe";
+import { CronJob } from "cron";
 
 import { Client } from "../../core/Client";
-import { Event, EventsList } from "../../types";
-import { duration, wait } from "../../utils/Commons";
-import { EventEmbed, territory } from "../../embeds/EventEmbed";
-import { Broadcaster } from "./Broadcaster";
-import { container } from "tsyringe";
+import { EventEmbed } from "../../embeds/EventEmbed";
+import { Locales } from "../../i18n/i18n-types";
+import { Event, Events, EventsList, HelltideEvent } from "../../types";
+import { duration } from "../../utils/Commons";
 import { clientSymbol } from "../../utils/Constants";
 import { getEvents, getStatus } from "../API";
-import L from "../../i18n/i18n-node";
-import { Locales } from "../../i18n/i18n-types";
+import { Broadcaster } from "./Broadcaster";
+import { getTitle } from "./NotifierUtils";
 
 const refreshInterval = duration.seconds(60);
 
@@ -41,7 +42,7 @@ export class EventNotifier {
   async init() {
     this.client.logger.info("Event notifier has been initialized.");
 
-    setInterval(() => this.refresh(), refreshInterval);
+    new CronJob("0 */1 * * * *", () => this.refresh(), null, true, "Europe/Brussels").start();
   }
 
   private async refresh() {
@@ -61,27 +62,66 @@ export class EventNotifier {
       return;
     }
 
-    for (let [key, value] of Object.entries(events)) {
-      let cache = await this.client.cache.get(`events:${this.client.user?.id}:${key}`);
+    for (let [key, event] of Object.entries(events)) {
+      const exist = await this.client.database.notification.findFirst({
+        where: {
+          type: key,
+          timestamp: event.timestamp,
+        },
+      });
 
-      const cachedEvent = JSON.parse(cache!) as Event;
+      if (!exist || (exist.refreshTimestamp > 0 && !exist.refreshed)) {
+        // If it doesn't exist, create it
+        if (!exist) {
+          const refreshTimestamp = key === Events.Helltide ? (event as HelltideEvent).refresh : 0;
 
-      const date = Date.now();
+          try {
+            await this.client.database.notification.create({
+              data: {
+                type: key,
+                data: event,
+                timestamp: event.timestamp,
+                refreshTimestamp: refreshTimestamp,
+              },
+            });
+          } catch (error) {
+            this.client.logger.error(error);
+          }
 
-      if (!cache || cachedEvent.timestamp !== value.timestamp || this.checkRefresh(value)) {
-        await this.client.cache.set(`events:${this.client.user?.id}:${key}`, JSON.stringify(value));
+          const now = Date.now();
+          const eventDate = new Date(event.timestamp * 1000).getTime();
 
-        if (value.refresh && value.refresh > 0) {
-          if (date / 1000 < value.refresh || date / 1000 > value.refresh + 60) {
-            this.client.logger.info(`Refresh ${key} is outdated, skipping...`);
+          // If the event is too old, skip it
+          if (now > eventDate + duration.minutes(5)) {
+            this.client.logger.info(`Event ${key} is too old, skipping...`);
             continue;
           }
-        } else {
-          const event = new Date(value.timestamp * 1000).getTime();
+        }
 
-          if (event < date - duration.minutes(2)) {
-            this.client.logger.info(`Event ${key} is outdated, skipping...`);
+        // If it exists but it's not refreshed, refresh it
+        if (exist && exist.refreshTimestamp && exist.refreshTimestamp > 0 && !exist.refreshed) {
+          const now = Date.now();
+          const startDate = new Date(exist.timestamp * 1000).getTime();
+          const refreshDate = new Date(exist.refreshTimestamp * 1000).getTime();
+          const endDate = startDate + duration.hours(1);
+
+          // If now is not between the start and end date, and before the refresh date, skip it
+          if (!(now >= startDate && now <= endDate) && now < refreshDate) {
+            this.client.logger.info(`Event ${key} is not ready to be refreshed, skipping...`);
             continue;
+          }
+
+          try {
+            await this.client.database.notification.update({
+              where: {
+                id: exist.id,
+              },
+              data: {
+                refreshed: true,
+              },
+            });
+          } catch (error) {
+            this.client.logger.error(error);
           }
         }
 
@@ -92,10 +132,10 @@ export class EventNotifier {
         for (const guild of guilds) {
           this.client.logger.info(`Checking guild ${guild.id}...`);
 
-          const embed = new EventEmbed(key, value);
+          const embed = new EventEmbed(key, event);
 
           let message: string | MessagePayload | MessageCreateOptions = {
-            content: this.getTitle(key, value, guild.locale as Locales),
+            content: getTitle(key, event, guild.locale as Locales),
             embeds: [embed],
           };
 
@@ -129,15 +169,12 @@ export class EventNotifier {
             )) as (Message<true> | null)[];
 
             if (response && response.length >= 1) {
-              await this.client.database.event.update({
-                data: { messageId: response[0]?.id },
-                where: {
-                  type_channelId: {
-                    type: key,
-                    channelId: setting.channelId,
-                  },
-                },
-              });
+              await this.client.repository.guild.updateEventMessageId(
+                guild.guildId,
+                key as EventsList,
+                setting.channelId,
+                response[0]?.id
+              );
             }
 
             // await wait(250);
@@ -146,57 +183,6 @@ export class EventNotifier {
 
         this.client.logger.info(`Event ${key} has been broadcasted to ${guilds.length} guilds.`);
       }
-    }
-  }
-
-  /**
-   * TODO - Implement refresh
-   */
-  private checkRefresh(event: Event) {
-    if (event.refresh && event.refresh > 0) {
-      const date = Date.now();
-
-      if (date / 1000 > event.refresh && date / 1000 < event.refresh + 60) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  /**
-   * Get the event title.
-   *
-   * @param key - The event key.
-   * @param event - The event object.
-   *
-   * @returns {string} - The event title.
-   */
-
-  private getTitle(key: string, event: Event, locale: Locales = "en") {
-    switch (key) {
-      case "boss":
-        return L[locale].events.WORLD_BOSS({
-          name: event.name,
-          zone: event.zone,
-          territory: event.territory,
-          time: time(event.timestamp, "t"),
-          nextName: event.nextExpectedName,
-          nextTime: time(event.nextExpected, "t"),
-        });
-      case "helltide":
-        return L[locale].events.HELLTIDE({
-          zone: territory[event.zone],
-          time: time(event.timestamp + 3600, "t"),
-          nextTime: time(event.timestamp + 8100, "t"),
-          refresh: event.refresh > 0 ? time(event.refresh, "R") : "/",
-        });
-      case "legion":
-        return L[locale].events.LEGION({
-          time: time(event.timestamp, "R"),
-          nextTime: time(event.timestamp + 1800, "t"),
-        });
-      default:
-        return key;
     }
   }
 }

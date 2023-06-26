@@ -16,6 +16,7 @@ const br = {
       NO_EVENTS: "Não há eventos ativados!",
       NO_EVENTS_IN_CHANNEL: "Não há eventos ativados em {channel}!",
       EVENTS_WORKING: "As notificações para **{event}** estão funcionando e serão enviadas para {channel}!",
+      REFRESHED: "Notifications for **{event}** have been refreshed and will be sent to {channels}.",
     },
   },
   armory: {
@@ -23,11 +24,13 @@ const br = {
     PLAYER_NOT_FOUND:
       "Não consegui encontrar o jogador **{player}**, verifique se você digitou o nome corretamente ou se o jogador existe!",
     NO_CHARACTERS: "O jogador não possui nenhum personagem!",
-    NO_CHARACTER: "Nenhum personagem encontrado, verifique se você digitou o nome corretamente ou se pelo menos um personagem existe!",
+    NO_CHARACTER:
+      "Nenhum personagem encontrado, verifique se você digitou o nome corretamente ou se pelo menos um personagem existe!",
     SELECT_CHARACTER: "Selecione um personagem para obter o armory!",
     MULTIPLE_CHARACTERS: "Esse jogador possui vários personagens! Por favor, selecione um!",
     PLAYER_CHOICE: "{name} ({characters} personagens)",
     NOT_TRACKED_YET: '"{player}" não está sendo rastreado no momento, envie para rastreá-lo!',
+    PLAYER_IN_QUEUE: "The player **{player}** is currently in the queue.",
   },
   events: {
     WORLD_BOSS: "{name} aparece em {zone} ({territory}) às {time}.\n\nO próximo chefe esperado é {nextName} às {nextTime}",
@@ -38,7 +41,7 @@ const br = {
     ARMORY: {
       STATISTICS_TITLE: "Estatísticas",
       STATISTICS_VALUE:
-        "Nível Mundial: {worldTier}\nMonstros mortos: {monstersKilled}\nElites mortos: {elitesKilled}\nOuros coletados: {goldsCollected}",
+        "Nível Mundial: {worldTier}\nMonstros mortos: {monstersKilled}\nElites mortos: {elitesKilled}\nOuros coletados: {goldCollected}",
       CHARACTER_CREATION_TITLE: "Criação de personagem",
       LAST_PLAYED_TITLE: "Última vez jogado",
       PLAYED_TIME_TITLE: "Tempo jogado",
@@ -56,7 +59,8 @@ const br = {
       STATISTICS_VALUE: "Servidores: {servers}\nUsuários: {users}",
       DEBUG_TITLE: "Depuração",
       DEBUG_VALUE: "Clusters: {clusters}\nShards: {shards}\nShardID: {shardId}\nClusterID: {clusterId}",
-      DESCRIPTION: "{username} é um bot do Discord que fornece informações sobre o Diablo 4 desenvolvido por glazk0 & Marco!",
+      DESCRIPTION:
+        "{username} é um bot do Discord que fornece informações sobre o Diablo 4 desenvolvido por glazk0 & Marco!",
     },
     SETTINGS: {
       TITLE: "Configurações de notificações do seu servidor",
@@ -69,7 +73,6 @@ const br = {
     NO_PLAYED_TIME: "Nenhum tempo jogado encontrado!",
     NO_EQUIPPED_ITEMS: "Nenhum item equipado encontrado!",
   },
-
 } satisfies Translation;
 
 export default br;

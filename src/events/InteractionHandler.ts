@@ -1,16 +1,7 @@
 import { readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import {
-  AutocompleteInteraction,
-  CacheType,
-  Collection,
-  CommandInteraction,
-  Events,
-  REST,
-  Routes,
-  StringSelectMenuInteraction,
-} from "discord.js";
+import { CacheType, Collection, CommandInteraction, Events, REST, Routes, StringSelectMenuInteraction } from "discord.js";
 import { container } from "tsyringe";
 
 import { Event } from "../core/Event";
@@ -20,7 +11,6 @@ import L from "../i18n/i18n-node";
 
 import { Guild } from "../types/Database";
 
-// TODO : Refactor this, it works for now
 export default class InteractionHandler extends Event {
   /**
    * The interactions collection.
@@ -76,19 +66,70 @@ export default class InteractionHandler extends Event {
 
     await ready;
 
-    const rest = new REST().setToken(process.env.TOKEN);
+    const currentInteractions = await this.client.application.commands.fetch();
 
-    try {
-      this.client.logger.info(`Started refreshing ${this.interactions.size} application (/) commands.`);
+    this.client.logger.info("Synchronizing interactions.");
 
-      const data = (await rest.put(Routes.applicationCommands(this.client.user.id), {
-        body: this.interactions.filter((interaction) => interaction.enabled).map((interaction) => interaction.command),
-      })) as any;
+    const interactions = this.interactions
+      .filter((interaction) => interaction.enabled)
+      .map((interaction) => interaction.command);
 
-      this.client.logger.info(`Successfully reloaded ${data.length} application (/) commands.`);
-    } catch (error) {
-      this.client.logger.error(`Failed to reload application (/) commands: ${error}`);
+    const newInteractions = interactions.filter(
+      (interaction) => !currentInteractions.some((i) => i.name === interaction.name)
+    );
+
+    for (let newInteraction of newInteractions) {
+      await this.client.application.commands.create(newInteraction);
     }
+
+    if (newInteractions.length > 0) this.client.logger.info(`Created ${newInteractions.length} interaction(s).`);
+
+    const deletedInteractions = currentInteractions
+      .filter((interaction) => !interactions.some((i) => i.name === interaction.name))
+      .toJSON();
+
+    for (let deletedInteraction of deletedInteractions) {
+      await deletedInteraction.delete();
+    }
+
+    if (deletedInteractions.length > 0) this.client.logger.info(`Deleted ${deletedInteractions.length} interaction(s).`);
+
+    const updatedInteractions = interactions.filter((interaction) =>
+      currentInteractions.some((i) => i.name === interaction.name)
+    );
+
+    let updatedInteractionsCount = 0;
+
+    for (let updatedInteraction of updatedInteractions) {
+      const newInteraction = updatedInteraction;
+      const previousInteraction = currentInteractions.find((i) => i.name === updatedInteraction.name);
+      let modified = false;
+      if (previousInteraction.name !== newInteraction.name) modified = true;
+      if (previousInteraction.defaultMemberPermissions !== newInteraction.defaultMemberPermissions) modified = true;
+      if (previousInteraction.dmPermission !== newInteraction.dmPermission) modified = true;
+      if (modified) {
+        await previousInteraction.edit(newInteraction);
+        updatedInteractionsCount++;
+      }
+    }
+
+    if (updatedInteractionsCount > 0) this.client.logger.info(`Updated ${updatedInteractionsCount} interaction(s).`);
+
+    this.client.logger.info("Interactions synchronized.");
+
+    // const rest = new REST().setToken(process.env.TOKEN);
+
+    // try {
+    //   this.client.logger.info(`Started refreshing ${this.interactions.size} application (/) commands.`);
+
+    //   const data = (await rest.put(Routes.applicationCommands(this.client.user.id), {
+    //     body: this.interactions.filter((interaction) => interaction.enabled).map((interaction) => interaction.command),
+    //   })) as any;
+
+    //   this.client.logger.info(`Successfully reloaded ${data.length} application (/) commands.`);
+    // } catch (error) {
+    //   this.client.logger.error(`Failed to reload application (/) commands: ${error}`);
+    // }
   }
 
   /**
@@ -108,18 +149,17 @@ export default class InteractionHandler extends Event {
 
     let context = {} as Context;
 
-    context.i18n = L[guild.locale || "en"];
+    context.i18n = L[(guild && guild.locale) || "en"];
     context.guild = guild;
 
-    if (interaction.isChatInputCommand()) {
+    let command = null as Interaction | null;
+
+    if (interaction.isChatInputCommand() || interaction.isAutocomplete()) {
+      command = this.interactions.get(interaction.commandName);
       if (!this.interactions.has(interaction.commandName)) return undefined;
+    }
 
-      this.client.logger.info(`Command ${interaction.commandName} was executed in ${interaction.guildId || "DM"}`);
-
-      const command = this.interactions.get(interaction.commandName);
-
-      if (!command) return undefined;
-
+    if (interaction.isChatInputCommand()) {
       this.client.logger.info(`Command ${command.command.name} was executed in ${interaction.guildId || "DM"}`);
 
       try {
@@ -130,14 +170,6 @@ export default class InteractionHandler extends Event {
     }
 
     if (interaction.isAutocomplete()) {
-      const autocomplete = interaction as AutocompleteInteraction;
-
-      if (!this.interactions.has(autocomplete.commandName)) return undefined;
-
-      const command = this.interactions.get(autocomplete.commandName);
-
-      if (!command) return undefined;
-
       try {
         await command.autocomplete?.(interaction, context);
       } catch (error) {
@@ -152,7 +184,7 @@ export default class InteractionHandler extends Event {
 
       if (!this.interactions.has(id)) return undefined;
 
-      const command = this.interactions.get(id);
+      command = this.interactions.get(id);
 
       if (!command) return undefined;
 
